@@ -2555,6 +2555,20 @@ static int kbase_cpu_mmap(struct kbase_context *kctx, struct kbase_va_region *re
 
 	__vm_flags_mod(vma, VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO, 0);
 
+	/*
+	 * For native struct-page-backed GPU allocations, strip VM_IO and
+	 * VM_PFNMAP so that madvise(MADV_DONTNEED) works from userspace
+	 * and MGLRU (LRU_GEN_WALKS_MMU) can age and reclaim these pages.
+	 *
+	 * Imported dma-buf mappings are excluded: they may cover non-RAM
+	 * pfns and must retain VM_IO/VM_PFNMAP.
+	 *
+	 * VM_NOHUGEPAGE prevents THP promotion races during compaction.
+	 */
+	if (reg->cpu_alloc->type == KBASE_MEM_TYPE_NATIVE) {
+		__vm_flags_mod(vma, VM_NOHUGEPAGE, VM_IO | VM_PFNMAP);
+	}
+
 	vma->vm_ops = &kbase_vm_ops;
 	vma->vm_private_data = map;
 
